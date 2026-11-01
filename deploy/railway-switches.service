@@ -1,0 +1,22 @@
+[Unit]
+Description=Railway switches -> Minecraft RCON bridge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/railway-switches
+ExecStart=/usr/bin/python3 /opt/railway-switches/server.py
+EnvironmentFile=/opt/railway-switches/.env
+Restart=always
+RestartSec=3
+User=www-data
+Group=www-data
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/railway-switches
+
+[Install]
+WantedBy=multi-user.target

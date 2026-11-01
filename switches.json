@@ -1,0 +1,47 @@
+{
+  "_comment": "Координаты редстоун-блоков, которые переключают стрелки. Правится через админ-панель на сайте или руками.",
+  "_how": "branch = /setblock x y z <block> (стрелка на боковой путь), straight = /setblock x y z <clear> (смотрит прямо)",
+
+  "1": {
+    "x": -7154,
+    "y": 101,
+    "z": 3862,
+    "block": "redstone_block",
+    "clear": "air"
+  },
+  "2": {
+    "x": null,
+    "y": null,
+    "z": null,
+    "block": "redstone_block",
+    "clear": "air"
+  },
+  "3": {
+    "x": null,
+    "y": null,
+    "z": null,
+    "block": "redstone_block",
+    "clear": "air"
+  },
+  "4": {
+    "x": null,
+    "y": null,
+    "z": null,
+    "block": "redstone_block",
+    "clear": "air"
+  },
+  "5": {
+    "x": null,
+    "y": null,
+    "z": null,
+    "block": "redstone_block",
+    "clear": "air"
+  },
+  "6": {
+    "x": null,
+    "y": null,
+    "z": null,
+    "block": "redstone_block",
+    "clear": "air"
+  }
+}

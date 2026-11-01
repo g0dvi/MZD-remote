@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Схема путей — переключение стрелок</title>
+<style>
+  :root{
+    --bg:#0b1220; --bg2:#131e33; --paper:#ffffff; --ink:#101828;
+    --yellow:#ffd028; --text:#e6edf7; --muted:#8fa3bf; --line:rgba(255,255,255,.08);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;padding:32px 20px 48px;
+    font-family:"Segoe UI",system-ui,-apple-system,Arial,sans-serif;
+    color:var(--text);
+    background:
+      radial-gradient(900px 500px at 15% -10%,#1b2b47 0%,transparent 60%),
+      radial-gradient(700px 500px at 95% 110%,#182a44 0%,transparent 55%),
+      var(--bg);
+  }
+  .wrap{max-width:1120px;margin:0 auto;}
+  header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:20px;}
+  h1{margin:0 0 6px;font-size:clamp(20px,2.6vw,28px);}
+  .sub{margin:0;font-size:14px;color:var(--muted);line-height:1.5;}
+  .reset{
+    appearance:none;border:1px solid var(--line);background:rgba(255,255,255,.04);
+    color:var(--text);font:inherit;font-size:14px;padding:10px 18px;
+    border-radius:999px;cursor:pointer;transition:background .2s,border-color .2s;
+  }
+  .reset:hover{background:rgba(255,255,255,.09);border-color:rgba(255,208,40,.5);}
+  .reset:disabled{opacity:.5;cursor:default;}
+
+  /* ---------- индикатор связи с сервером ---------- */
+  .actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px;}
+  .status{
+    display:inline-flex;align-items:center;gap:8px;
+    font-size:12.5px;line-height:1;padding:10px 14px;border-radius:999px;
+    border:1px solid var(--line);background:rgba(255,255,255,.04);
+    color:var(--muted);max-width:340px;white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis;
+    transition:color .2s,border-color .2s,background .2s;
+  }
+  .status::before{
+    content:"";width:8px;height:8px;border-radius:50%;
+    background:#94a3b8;box-shadow:0 0 0 4px rgba(148,163,184,.14);
+    flex:0 0 auto;transition:.2s;
+  }
+  .status[data-kind="ok"]{color:#86efac;border-color:rgba(34,197,94,.35);background:rgba(34,197,94,.08);}
+  .status[data-kind="ok"]::before{background:#22c55e;box-shadow:0 0 0 4px rgba(34,197,94,.18);}
+  .status[data-kind="warn"]{color:#fde68a;border-color:rgba(255,208,40,.35);background:rgba(255,208,40,.08);}
+  .status[data-kind="warn"]::before{background:var(--yellow);box-shadow:0 0 0 4px rgba(255,208,40,.18);}
+  .status[data-kind="error"]{color:#fca5a5;border-color:rgba(239,68,68,.4);background:rgba(239,68,68,.09);}
+  .status[data-kind="error"]::before{background:#ef4444;box-shadow:0 0 0 4px rgba(239,68,68,.18);}
+  .status[data-kind="busy"]{color:#bae6fd;border-color:rgba(56,189,248,.35);background:rgba(56,189,248,.08);}
+  .status[data-kind="busy"]::before{background:#38bdf8;box-shadow:0 0 0 4px rgba(56,189,248,.18);animation:pulse 1s infinite;}
+  @keyframes pulse{50%{opacity:.35;}}
+
+  /* ---------- всплывающее сообщение ---------- */
+  .toast{
+    position:fixed;left:50%;bottom:26px;transform:translate(-50%,14px);
+    max-width:min(560px,calc(100vw - 32px));
+    padding:13px 18px;border-radius:14px;font-size:14px;line-height:1.4;
+    background:#3b0d12;color:#ffe4e6;border:1px solid rgba(239,68,68,.5);
+    box-shadow:0 20px 50px -20px rgba(0,0,0,.9);
+    opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;z-index:50;
+  }
+  .toast.is-visible{opacity:1;transform:translate(-50%,0);}
+
+  .panel{
+    background:var(--paper);border-radius:20px;padding:18px 16px;
+    box-shadow:0 30px 60px -30px rgba(0,0,0,.8),inset 0 0 0 1px rgba(16,24,40,.06);
+  }
+  svg#scheme{display:block;width:100%;height:auto;}
+
+  /* ---------- пути ---------- */
+  .track line{stroke:var(--ink);stroke-width:1.4;stroke-linecap:round;fill:none;}
+
+  /* ---------- стрелки (жёлтые полоски) ---------- */
+  .switch{cursor:pointer;outline:none;}
+  .halo{fill:var(--yellow);opacity:0;transition:opacity .2s;}
+  .switch:hover .halo,
+  .switch:focus-visible .halo{opacity:.22;}
+
+  .strip{
+    stroke:var(--yellow);
+    stroke-width:1.9;
+    stroke-linecap:round;
+    fill:none;
+    transform-box:view-box;
+    transition:transform .45s cubic-bezier(.22,.9,.24,1);
+  }
+  .switch:hover .strip{ stroke:#ffe066; }
+
+  .label{
+    fill:var(--ink);font-size:3.8px;font-weight:700;text-anchor:middle;
+    pointer-events:none;opacity:.45;
+  }
+
+  /* ---------- карточки ---------- */
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-top:20px;}
+  .card{
+    padding:13px 15px;border-radius:14px;
+    background:linear-gradient(160deg,var(--bg2),rgba(19,30,51,.55));
+    border:1px solid var(--line);transition:border-color .3s,box-shadow .3s;
+  }
+  .card.is-branch{border-color:rgba(255,208,40,.6);box-shadow:0 12px 40px -22px rgba(255,208,40,.8);}
+  .card.is-pending{opacity:.65;}
+  .card.is-error{border-color:rgba(239,68,68,.65);box-shadow:0 12px 40px -22px rgba(239,68,68,.7);}
+  .card.is-error .dot{background:#ef4444;box-shadow:0 0 0 4px rgba(239,68,68,.18);}
+  .card__head{display:flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-bottom:7px;}
+  .dot{width:8px;height:8px;border-radius:50%;background:#38bdf8;box-shadow:0 0 0 4px rgba(56,189,248,.16);transition:.3s;}
+  .card.is-branch .dot{background:var(--yellow);box-shadow:0 0 0 4px rgba(255,208,40,.18);}
+  .card__value{font-size:16px;font-weight:700;line-height:1.25;}
+  .card.is-branch .card__value{color:var(--yellow);}
+
+  .legend{display:flex;flex-wrap:wrap;gap:8px 22px;margin:18px 4px 2px;font-size:13px;color:var(--muted);}
+  .legend span{display:inline-flex;align-items:center;gap:8px;}
+  .legend i{display:inline-block;width:24px;height:6px;border-radius:3px;background:var(--yellow);}
+  .legend b{display:inline-block;width:24px;height:2px;border-radius:2px;background:var(--ink);}
+
+  /* ---------- админ-панель ---------- */
+  .admin{
+    margin-top:18px;padding:18px;border-radius:18px;border:1px solid var(--line);
+    background:linear-gradient(160deg,var(--bg2),rgba(19,30,51,.55));
+  }
+  .admin[hidden]{display:none;}
+  .admin__head{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start;justify-content:space-between;margin-bottom:14px;}
+  .admin__head h2{margin:0 0 6px;font-size:16px;}
+  .admin .hint{margin:0;font-size:13px;color:var(--muted);line-height:1.5;max-width:660px;}
+  .admin .hint code{background:rgba(0,0,0,.3);padding:1px 5px;border-radius:5px;font-size:12px;}
+
+  .arow{
+    display:grid;grid-template-columns:38px repeat(5,minmax(0,1fr));gap:10px;
+    align-items:end;padding:12px 0;border-top:1px solid var(--line);
+  }
+  .arow:first-child{border-top:none;}
+  .arow__num{font-weight:700;color:var(--yellow);font-size:15px;padding-bottom:10px;}
+  .fld{display:flex;flex-direction:column;gap:5px;font-size:10.5px;letter-spacing:.07em;
+    text-transform:uppercase;color:var(--muted);}
+  .fld input{
+    width:100%;background:rgba(0,0,0,.28);border:1px solid var(--line);color:var(--text);
+    border-radius:9px;padding:9px 10px;font:inherit;font-size:13px;
+    font-variant-numeric:tabular-nums;
+  }
+  .fld input::placeholder{color:rgba(143,163,191,.5);}
+  .fld input:focus{outline:none;border-color:rgba(255,208,40,.6);background:rgba(0,0,0,.42);}
+  .arow__cmd{grid-column:2 / -1;font-family:ui-monospace,Consolas,"Courier New",monospace;
+    font-size:11.5px;line-height:1.65;color:var(--muted);word-break:break-all;}
+  .arow__cmd b{color:#fde68a;font-weight:600;}
+  .arow__cmd i{font-style:normal;color:rgba(143,163,191,.65);}
+
+  .admin__foot{display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin-top:16px;}
+  .btn-primary{background:rgba(255,208,40,.14);border-color:rgba(255,208,40,.55);color:#ffe066;font-weight:600;}
+  .btn-primary:hover{background:rgba(255,208,40,.22);}
+  .admin__msg{font-size:13px;color:var(--muted);}
+  .admin__msg.is-ok{color:#86efac;}
+  .admin__msg.is-error{color:#fca5a5;}
+
+  @media(max-width:560px){
+    body{padding:22px 12px 36px;}
+    .cards{grid-template-columns:1fr;}
+    .panel{padding:10px;border-radius:16px;}
+    .arow{grid-template-columns:30px repeat(2,minmax(0,1fr));}
+    .arow__cmd{grid-column:1 / -1;}
+    .admin{padding:14px;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Схема путей</h1>
+      <p class="sub">Нажмите на жёлтую полоску — стрелка переключится, а в Minecraft уйдёт команда.</p>
+    </div>
+    <div class="actions">
+      <span class="status" id="status" data-kind="idle">проверяю связь…</span>
+      <button class="reset" id="reset" type="button">Сбросить</button>
+      <button class="reset" id="adminToggle" type="button">Админ</button>
+      <button class="reset" id="serverBtn" type="button">Сервер</button>
+    </div>
+  </header>
+
+  <section class="panel">
+    <!-- геометрия путей взята из исходного SVG 1:1 -->
+    <svg id="scheme" viewBox="0 0 182 65" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Схема путей со стрелками">
+      <!-- ================= ПУТИ ================= -->
+      <g class="track">
+        <line x1="25" x2="166" y1="45" y2="45"/>
+        <line x1="60" x2="108" y1="40" y2="40"/>
+        <line x1="65" x2="103" y1="35" y2="35"/>
+        <line x1="0" x2="29.721241" y1="0" y2="0" transform="matrix(-0.707107,0.707106,-0.707106,-0.707107,75.0161,24)"/>
+        <line x1="0" x2="14.4580231" y1="0" y2="0" transform="matrix(-0.707108,-0.707105,0.707105,-0.707108,112.711,44.711)"/>
+        <line x1="0" x2="15.8706064" y1="0" y2="0" transform="matrix(-0.707104,-0.70711,0.70711,-0.707104,133.222,45.2223)"/>
+      </g>
+
+      <!-- ================= СТРЕЛКИ (жёлтые полоски) ================= -->
+
+      <!-- 1 · вход с главного пути на парк · (55, 45) -->
+      <g class="switch" data-switch="1" data-delta="-45" tabindex="0" role="button"
+         aria-pressed="false" aria-label="Стрелка 1">
+        <title>Стрелка 1</title>
+        <circle class="halo" cx="55" cy="45" r="4.5"/>
+        <line class="bar strip" x1="55" y1="45" x2="61" y2="45"
+              style="transform-origin:55px 45px"/>
+      </g>
+      <text class="label" x="55" y="49.6">1</text>
+
+      <!-- 2 · парк: со 2-го пути на 3-й · (60, 40) -->
+      <g class="switch" data-switch="2" data-delta="-45" tabindex="0" role="button"
+         aria-pressed="false" aria-label="Стрелка 2">
+        <title>Стрелка 2</title>
+        <circle class="halo" cx="60" cy="40" r="4.5"/>
+        <line class="bar strip" x1="60" y1="40" x2="66" y2="40"
+              style="transform-origin:60px 40px"/>
+      </g>
+      <text class="label" x="60" y="44.6">2</text>
+
+      <!-- 3 · парк: с 3-го пути на продолжение · (65, 35) -->
+      <g class="switch" data-switch="3" data-delta="-45" tabindex="0" role="button"
+         aria-pressed="false" aria-label="Стрелка 3">
+        <title>Стрелка 3</title>
+        <circle class="halo" cx="65" cy="35" r="4.5"/>
+        <line class="bar strip" x1="65" y1="35" x2="71" y2="35"
+              style="transform-origin:65px 35px"/>
+      </g>
+      <text class="label" x="65" y="31.6">3</text>
+
+      <!-- 4 · правая горловина: со 2-го пути на 3-й · (108, 40) -->
+      <g class="switch" data-switch="4" data-delta="45" tabindex="0" role="button"
+         aria-pressed="false" aria-label="Стрелка 4">
+        <title>Стрелка 4</title>
+        <circle class="halo" cx="108" cy="40" r="4.5"/>
+        <line class="bar strip" x1="108" y1="40" x2="102" y2="40"
+              style="transform-origin:108px 40px"/>
+      </g>
+      <text class="label" x="108" y="44.6">4</text>
+
+      <!-- 5 · правая горловина: съезд на главный путь · (112.7, 44.7) -->
+      <g class="switch" data-switch="5" data-delta="45" tabindex="0" role="button"
+         aria-pressed="false" aria-label="Стрелка 5">
+        <title>Стрелка 5</title>
+        <circle class="halo" cx="112.7" cy="44.7" r="4.5"/>
+        <line class="bar strip" x1="112.7" y1="44.7" x2="106.7" y2="44.7"
+              style="transform-origin:112.7px 44.7px"/>
+      </g>
+      <text class="label" x="112.7" y="49.3">5</text>
+
+      <!-- 6 · отдельное ответвление · (133.2, 45.2) -->
+      <g class="switch" data-switch="6" data-delta="45" tabindex="0" role="button"
+         aria-pressed="false" aria-label="Стрелка 6">
+        <title>Стрелка 6</title>
+        <circle class="halo" cx="133.2" cy="45.2" r="4.5"/>
+        <line class="bar strip" x1="133.2" y1="45.2" x2="127.2" y2="45.2"
+              style="transform-origin:133.2px 45.2px"/>
+      </g>
+      <text class="label" x="133.2" y="49.8">6</text>
+    </svg>
+
+    <div class="cards" id="cards"></div>
+
+    <div class="legend">
+      <span><i></i> положение стрелки (маршрут)</span>
+      <span><b></b> путевое развитие</span>
+    </div>
+  </section>
+
+  <section class="admin" id="admin" hidden>
+    <div class="admin__head">
+      <div>
+        <h2>Админ-панель · координаты стрелок</h2>
+        <p class="hint">
+          Для каждой стрелки укажи координаты редстоун-блока. В бок:
+          <code>/setblock x y z redstone_block</code>. Прямо:
+          <code>/setblock x y z air</code>.
+        </p>
+      </div>
+      <button class="reset" id="adminClose" type="button">Скрыть</button>
+    </div>
+
+    <div id="adminRows"></div>
+
+    <div class="admin__foot">
+      <button class="reset btn-primary" id="adminSave" type="button">Сохранить координаты</button>
+      <span class="admin__msg" id="adminMsg"></span>
+    </div>
+  </section>
+</div>
+
+<script>
+(function () {
+  var cfg = {
+    1:{ straight:'Прямо — главный путь', branch:'На парк' },
+    2:{ straight:'Прямо — 2-й путь',     branch:'На 3-й путь' },
+    3:{ straight:'Прямо — 3-й путь',     branch:'На продолжение пути' },
+    4:{ straight:'Прямо — 2-й путь',     branch:'На 3-й путь' },
+    5:{ straight:'Прямо — главный путь', branch:'На парк' },
+    6:{ straight:'Прямо — главный путь', branch:'На ответвление' }
+  };
+
+  /* страница отдана сервером -> можно отправлять команды */
+  var SERVED = location.protocol === 'http:' || location.protocol === 'https:';
+
+  /* ---------- адрес сервера и ключ доступа ----------
+     Нужны, когда страница лежит на GitHub Pages, а сервер — на VPS.
+     Хранятся в браузере, в исходниках страницы их нет. */
+  var API_BASE = '';
+  var API_KEY = '';
+  var backendState = 'unknown';   // ok | down | none (демо)
+
+  try {
+    API_BASE = localStorage.getItem('railway_api') || '';
+    API_KEY = localStorage.getItem('railway_key') || '';
+  } catch (e) { API_BASE = ''; API_KEY = ''; }
+
+  function apiUrl(path) {
+    if (!API_BASE) return path;
+    return API_BASE.replace(/\/+$/, '') + '/' + path.replace(/^\/+/, '');
+  }
+
+  function apiConfigure() {
+    var base = window.prompt(
+      'Адрес сервера, например https://moy-vps.ru\nПусто — этот же сайт (без внешнего сервера).',
+      API_BASE || ''
+    );
+    if (base === null) return false;
+
+    var key = window.prompt('Ключ доступа к серверу (API_KEY). Можно оставить пустым.', API_KEY || '');
+    if (key === null) return false;
+
+    API_BASE = base.trim();
+    API_KEY = key.trim();
+    try {
+      localStorage.setItem('railway_api', API_BASE);
+      localStorage.setItem('railway_key', API_KEY);
+    } catch (e) {}
+    checkHealth();
+    return true;
+  }
+
+  function apiFetch(path, options, retried) {
+    options = options || {};
+    options.headers = options.headers || {};
+    if (API_KEY) options.headers['X-Api-Key'] = API_KEY;
+
+    return fetch(apiUrl(path), options).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (data) {
+        if (r.status === 401 && !retried) {
+          var key = window.prompt('Ключ доступа к серверу:', API_KEY || '');
+          if (key) {
+            API_KEY = key.trim();
+            try { localStorage.setItem('railway_key', API_KEY); } catch (e) {}
+            return apiFetch(path, options, true);
+          }
+        }
+        if (!r.ok || !data.ok) throw new Error(data.error || ('HTTP ' + r.status));
+        return data;
+      });
+    });
+  }
+
+  var state = {};    // n -> true = на боковом пути
+  var delta = {};    // n -> угол поворота полоски
+  var pending = {};  // n -> true = запрос в полёте
+
+  Object.keys(cfg).forEach(function (n) {
+    state[n] = false;
+    pending[n] = false;
+    delta[n] = parseFloat(document.querySelector('.switch[data-switch="' + n + '"]').dataset.delta);
+  });
+
+  /* ================= статус и сообщения ================= */
+  var statusEl = document.getElementById('status');
+
+  var toastEl = document.createElement('div');
+  toastEl.className = 'toast';
+  document.body.appendChild(toastEl);
+
+  var toastTimer = null;
+  function toast(text) {
+    toastEl.textContent = text;
+    toastEl.classList.add('is-visible');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.classList.remove('is-visible'); }, 6000);
+  }
+
+  var idleStatus = { kind: 'idle', text: 'проверяю связь…' };
+  var statusTimer = null;
+
+  function paintStatus(kind, text) {
+    statusEl.dataset.kind = kind;
+    statusEl.textContent = text;
+    statusEl.title = text;
+  }
+
+  function setIdle() { paintStatus(idleStatus.kind, idleStatus.text); }
+
+  function setStatus(kind, text, holdMs) {
+    paintStatus(kind, text);
+    clearTimeout(statusTimer);
+    if (holdMs) statusTimer = setTimeout(setIdle, holdMs);
+  }
+
+  /* при возврате на вкладку сразу перепроверяем связь */
+  window.addEventListener('focus', function () { checkHealth(); });
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) checkHealth();
+  });
+
+  function checkHealth() {
+    if (!SERVED && !API_BASE) {
+      backendState = 'none';
+      idleStatus = { kind: 'warn', text: 'Демо-режим: команды не отправляются' };
+      setIdle();
+      return;
+    }
+
+    apiFetch('api/health')
+      .then(function (d) {
+        backendState = 'ok';
+        if (d.state) applyRemoteState(d.state);
+        if (d.mode === 'live') {
+          idleStatus = { kind: 'ok', text: 'RCON: ' + (d.rcon.host || '—') + ':' + d.rcon.port };
+        } else if (d.rcon && d.rcon.configured) {
+          idleStatus = { kind: 'warn', text: 'RCON: заглушка (команды только в лог)' };
+        } else {
+          idleStatus = { kind: 'warn', text: 'RCON не настроен — режим заглушки' };
+        }
+        setIdle();
+        startSync();
+      })
+      .catch(function () {
+        stopSync();
+        // сервера рядом нет -> страница работает как витрина
+        backendState = API_BASE ? 'down' : 'none';
+        idleStatus = {
+          kind: 'warn',
+          text: API_BASE ? 'Сервер недоступен — проверь адрес' : 'Демо-режим: команды не отправляются'
+        };
+        setIdle();
+      });
+  }
+
+  /* ================= отправка на сервер ================= */
+  function sendSwitch(n, position) {
+    if (backendState === 'none') return Promise.resolve(true); // демо: только визуал
+
+    setStatus('busy', 'Отправляю стрелку ' + n + '…');
+
+    return apiFetch('api/switch/' + n, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ position: position })
+    })
+      .then(function (data) {
+        var where = data.position === 'branch' ? 'боковой путь' : 'прямо';
+        if (data.mode === 'dry-run') {
+          setStatus('warn', 'Стрелка ' + n + ' → ' + where + ' (заглушка)', 3500);
+        } else {
+          setStatus('ok', 'Стрелка ' + n + ' → ' + where + ' · отправлено', 3500);
+        }
+        return true;
+      })
+      .catch(function (err) {
+        setStatus('error', 'Ошибка: ' + err.message, 8000);
+        toast('Стрелка ' + n + ': ' + err.message);
+        return false;
+      });
+  }
+
+  /* карточки */
+  var box = document.getElementById('cards');
+  Object.keys(cfg).forEach(function (n) {
+    var el = document.createElement('article');
+    el.className = 'card';
+    el.id = 'card' + n;
+    el.innerHTML =
+      '<div class="card__head"><span class="dot"></span> Стрелка ' + n + '</div>' +
+      '<div class="card__value"></div>';
+    box.appendChild(el);
+  });
+
+  function render(n) {
+    var sw = document.querySelector('.switch[data-switch="' + n + '"]');
+    var strip = sw.querySelector('.strip');
+    var card = document.getElementById('card' + n);
+    var on = state[n];
+
+    strip.style.transform = 'rotate(' + (on ? delta[n] : 0) + 'deg)';
+    card.classList.toggle('is-branch', on);
+    card.querySelector('.card__value').textContent = on ? cfg[n].branch : cfg[n].straight;
+    sw.setAttribute('aria-pressed', String(on));
+  }
+
+  /* ================= переключение ================= */
+  function commit(n, on) {
+    if (pending[n]) return Promise.resolve(true);
+    pending[n] = true;
+
+    var card = document.getElementById('card' + n);
+    card.classList.remove('is-error');
+    card.classList.add('is-pending');
+
+    state[n] = on;
+    render(n);
+
+    return sendSwitch(n, on ? 'branch' : 'straight').then(function (ok) {
+      pending[n] = false;
+      card.classList.remove('is-pending');
+
+      if (!ok) {
+        // команда не ушла — возвращаем полоску и карточку назад
+        card.classList.add('is-error');
+        state[n] = !on;
+        render(n);
+      }
+      return ok;
+    });
+  }
+
+  document.querySelectorAll('.switch').forEach(function (sw) {
+    var n = sw.dataset.switch;
+
+    function toggle() {
+      if (pending[n]) return;
+      commit(n, !state[n]);
+    }
+
+    sw.addEventListener('click', toggle);
+    sw.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+        e.preventDefault();
+        toggle();
+      }
+    });
+  });
+
+  /* ================= сброс ================= */
+  document.getElementById('reset').addEventListener('click', function () {
+    var tasks = [];
+
+    Object.keys(cfg).forEach(function (n) {
+      var card = document.getElementById('card' + n);
+      if (state[n] || card.classList.contains('is-error')) {
+        tasks.push(commit(n, false));
+      }
+    });
+
+    if (!tasks.length) {
+      setStatus('warn', 'Все стрелки уже стоят прямо', 2500);
+    }
+  });
+
+  /* ================= админ-панель ================= */
+  var adminBox = document.getElementById('admin');
+  var adminRows = document.getElementById('adminRows');
+  var adminMsgEl = document.getElementById('adminMsg');
+  var adminKey = '';
+  var adminLoaded = false;
+
+  try { adminKey = sessionStorage.getItem('railway_admin_key') || ''; } catch (e) { adminKey = ''; }
+  if (!adminKey && API_KEY) adminKey = API_KEY;
+
+  function esc(value) {
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function adminMessage(text, kind) {
+    adminMsgEl.textContent = text;
+    adminMsgEl.className = 'admin__msg' + (kind ? ' is-' + kind : '');
+  }
+
+  function adminRequest(url, options) {
+    options = options || {};
+    options.headers = options.headers || {};
+    if (adminKey) options.headers['X-Admin-Key'] = adminKey;
+    if (API_KEY) options.headers['X-Api-Key'] = API_KEY;
+
+    return fetch(apiUrl(url), options).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (data) {
+        if (r.status === 401) {
+          if (!API_KEY && adminKey) {
+            API_KEY = adminKey;
+            try { localStorage.setItem('railway_key', API_KEY); } catch (e) {}
+            return adminRequest(url, options);
+          }
+          var pass = window.prompt('Пароль администратора (он же ключ доступа):');
+          if (pass) {
+            adminKey = pass;
+            API_KEY = pass;
+            try { sessionStorage.setItem('railway_admin_key', pass); } catch (e) {}
+            try { localStorage.setItem('railway_key', pass); } catch (e) {}
+            return adminRequest(url, options);
+          }
+          throw new Error('Нужен пароль администратора');
+        }
+        if (!r.ok || !data.ok) throw new Error(data.error || ('HTTP ' + r.status));
+        return data;
+      });
+    });
+  }
+
+  var FIELDS = [
+    ['x', 'X'],
+    ['y', 'Y'],
+    ['z', 'Z'],
+    ['block', 'Блок «в бок»'],
+    ['clear', 'Блок «прямо»']
+  ];
+
+  function buildAdminRows(switches) {
+    adminRows.innerHTML = '';
+    var numbers = Object.keys(switches).sort(function (a, b) { return Number(a) - Number(b); });
+
+    numbers.forEach(function (n) {
+      var cfg = switches[n] || {};
+      var row = document.createElement('div');
+      row.className = 'arow';
+      row.dataset.n = n;
+
+      var html = '<div class="arow__num">' + esc(n) + '</div>';
+      FIELDS.forEach(function (pair) {
+        var key = pair[0];
+        var value = cfg[key];
+        var shown = (value === null || value === undefined) ? '' : String(value);
+        html += '<label class="fld"><span>' + pair[1] + '</span>' +
+                '<input data-k="' + key + '" value="' + esc(shown) + '" ' +
+                'autocomplete="off" spellcheck="false"' +
+                (key === 'x' || key === 'y' || key === 'z' ? ' inputmode="numeric"' : '') +
+                '></label>';
+      });
+      html += '<div class="arow__cmd"></div>';
+
+      row.innerHTML = html;
+      adminRows.appendChild(row);
+
+      row.querySelectorAll('input').forEach(function (input) {
+        input.addEventListener('input', function () { updateAdminPreview(row); });
+      });
+      updateAdminPreview(row);
+    });
+  }
+
+  function fieldValue(row, key) {
+    var input = row.querySelector('[data-k="' + key + '"]');
+    return input ? input.value.trim() : '';
+  }
+
+  function updateAdminPreview(row) {
+    var x = fieldValue(row, 'x');
+    var y = fieldValue(row, 'y');
+    var z = fieldValue(row, 'z');
+    var block = fieldValue(row, 'block') || 'redstone_block';
+    var clear = fieldValue(row, 'clear') || 'air';
+    var out = row.querySelector('.arow__cmd');
+    if (!out) return;
+
+    if (!x || !y || !z) {
+      out.innerHTML = '<i>координаты не заданы — блок не переключается</i>';
+      return;
+    }
+
+    var coords = esc(x) + ' ' + esc(y) + ' ' + esc(z);
+    out.innerHTML =
+      'в бок: <b>/setblock ' + coords + ' ' + esc(block) + '</b><br>' +
+      'прямо: <b>/setblock ' + coords + ' ' + esc(clear) + '</b>';
+  }
+
+  function loadAdmin() {
+    adminMessage('Загружаю…');
+    adminRequest('api/admin/switches')
+      .then(function (data) {
+        buildAdminRows(data.switches || {});
+        adminLoaded = true;
+        adminMessage('Координаты загружены', 'ok');
+      })
+      .catch(function (err) {
+        adminMessage(err.message, 'error');
+      });
+  }
+
+  function saveAdmin() {
+    var payload = { switches: {} };
+
+    adminRows.querySelectorAll('.arow').forEach(function (row) {
+      payload.switches[row.dataset.n] = {
+        x: fieldValue(row, 'x') || null,
+        y: fieldValue(row, 'y') || null,
+        z: fieldValue(row, 'z') || null,
+        block: fieldValue(row, 'block') || 'redstone_block',
+        clear: fieldValue(row, 'clear') || 'air'
+      };
+    });
+
+    adminMessage('Сохраняю…');
+
+    adminRequest('api/admin/switches', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+      .then(function (data) {
+        buildAdminRows(data.switches || {});
+        var ready = (data.configured || []).join(', ');
+        adminMessage('Сохранено. С координатами: ' + (ready || 'ни одной'), 'ok');
+        toast('Координаты стрелок сохранены');
+      })
+      .catch(function (err) {
+        adminMessage(err.message, 'error');
+        toast('Не удалось сохранить: ' + err.message);
+      });
+  }
+
+  document.getElementById('adminToggle').addEventListener('click', function () {
+    adminBox.hidden = !adminBox.hidden;
+    if (adminBox.hidden) return;
+
+    if (!adminLoaded) loadAdmin();
+    adminBox.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+
+  document.getElementById('adminClose').addEventListener('click', function () {
+    adminBox.hidden = true;
+  });
+
+  document.getElementById('adminSave').addEventListener('click', saveAdmin);
+
+  document.getElementById('serverBtn').addEventListener('click', apiConfigure);
+
+  /* ================= синхронизация между пользователями ================= */
+  var events = null;
+  var eventsTimer = null;
+
+  function applyRemoteState(map) {
+    if (!map) return;
+
+    Object.keys(map).forEach(function (n) {
+      if (!(n in cfg)) return;
+      if (pending[n]) return;          // у нас свой запрос в полёте — не мешаем
+
+      var on = map[n] === 'branch';
+      if (state[n] === on) return;
+
+      state[n] = on;
+      render(n);
+
+      var card = document.getElementById('card' + n);
+      if (card) card.classList.remove('is-error');
+    });
+  }
+
+  function stopSync() {
+    clearTimeout(eventsTimer);
+    if (events) {
+      try { events.close(); } catch (e) {}
+      events = null;
+    }
+  }
+
+  function startSync() {
+    if (backendState !== 'ok' || events) return;
+
+    var url = apiUrl('api/events');
+    if (API_KEY) {
+      url += (url.indexOf('?') === -1 ? '?' : '&') + 'key=' + encodeURIComponent(API_KEY);
+    }
+
+    try {
+      events = new EventSource(url);
+    } catch (e) {
+      events = null;
+      return;
+    }
+
+    events.onmessage = function (e) {
+      var msg = null;
+      try { msg = JSON.parse(e.data); } catch (err) { return; }
+      if (msg && msg.type === 'state') applyRemoteState(msg.switches);
+    };
+
+    events.onerror = function () {
+      stopSync();
+      eventsTimer = setTimeout(startSync, 5000);
+    };
+  }
+
+  /* ================= старт ================= */
+  Object.keys(state).forEach(render);
+  checkHealth();
+  setInterval(checkHealth, 30000);
+})();
+</script>
+</body>
+</html>
